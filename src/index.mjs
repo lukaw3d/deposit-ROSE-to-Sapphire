@@ -22,11 +22,10 @@ const multiplyConsensusToSapphire = 10n ** BigInt(sapphireConfig.decimals - cons
 
 async function init() {
   const mnemonic = oasis.hdkey.HDKey.generateMnemonic(256)
-  const signerKeyPair = await oasis.hdkey.HDKey.getAccountSigner(mnemonic, 0)
-  const signer = oasis.signature.NaclSigner.fromSecret(signerKeyPair.secretKey, 'this key is not important')
+  const signer = oasis.signature.NaclSigner.fromSecret((await oasis.hdkey.HDKey.getAccountSigner(mnemonic, 0)).secretKey, 'this key is not important')
   const consensusAddress =
     /** @type {`oasis1${string}`} */
-    (await publicKeyToAddress(signerKeyPair.publicKey))
+    (await publicKeyToAddress(signer.public()))
 
   const sapphireAddress =
     /** @type {`0x${string}`} */

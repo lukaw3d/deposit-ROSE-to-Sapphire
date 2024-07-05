@@ -74,6 +74,8 @@ async function init() {
       rtw
         .setBody({
           amount: [oasis.quantity.fromBigInt(amountToDeposit * multiplyConsensusToSapphire), oasisRT.token.NATIVE_DENOMINATION],
+          // TODO: Do we need to deposit into intermediate Sapphire account, then EVM transfer to target?
+          // see https://github.com/lukaw3d/withdraw-ROSE-from-Sapphire/commit/a6db0973d989ac0f8d875e746b4661984604dd7a
           to: oasis.staking.addressFromBech32(await getEvmBech32Address(sapphireAddress)),
         })
         .setFeeAmount([oasis.quantity.fromBigInt(0n), oasisRT.token.NATIVE_DENOMINATION])

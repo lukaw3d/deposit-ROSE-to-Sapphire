@@ -43,8 +43,8 @@ async function init() {
       console.log({ consensusBalance, sapphireBalance })
 
       window.print_mnemonic.textContent = mnemonic
-      window.print_consensus_account.textContent = consensusAddress + ' balance: ' + consensusBalance
-      window.print_sapphire_account.textContent = sapphireAddress + ' balance: ' + sapphireBalance
+      window.print_consensus_account.textContent = consensusAddress + '   balance: ' + consensusBalance
+      window.print_sapphire_account.textContent = sapphireAddress + '   balance: ' + sapphireBalance
       if (consensusBalance <= 0n) {
         setTimeout(poll, 10000)
         return

@@ -58,59 +58,85 @@ async function init() {
     try {
       const { consensusBalance, intermediateSapphireBalance, sapphireBalance } = await updateBalances()
       console.log({ consensusBalance, intermediateSapphireBalance, sapphireBalance })
+      if (consensusBalance > 0n) {
+        console.log('depositable', consensusBalance)
+        const amountToDeposit = consensusBalance
 
-      if (consensusBalance <= 0n) {
-        setTimeout(poll, 10000)
-        return
-      }
-
-      console.log('depositable', consensusBalance)
-      const amountToDeposit = consensusBalance
-
-      // setAllowance to sapphireConfig.mainnet.address
-      const tw = oasis.staking.allowWrapper()
-      tw.setNonce(await getConsensusNonce(consensusAddress))
-      tw.setFeeAmount(oasis.quantity.fromBigInt(0n))
-      tw.setBody({
-        beneficiary: oasis.staking.addressFromBech32(sapphireConfig.mainnet.address),
-        negative: false,
-        amount_change: oasis.quantity.fromBigInt(amountToDeposit), // TODO: this assumes that initial allowance is 0
-      })
-      const gas = await tw.estimateGas(nic, signer.public())
-      tw.setFeeGas(gas)
-      await tw.sign(new oasis.signature.BlindContextSigner(signer), chainContext)
-      await tw.submit(nic)
-
-      // Deposit into Sapphire
-      const rtw = new oasisRT.consensusAccounts.Wrapper(
-        oasis.misc.fromHex(sapphireConfig.mainnet.runtimeId),
-      ).callDeposit()
-      rtw
-        .setBody({
-          amount: [oasis.quantity.fromBigInt(amountToDeposit * multiplyConsensusToSapphire), oasisRT.token.NATIVE_DENOMINATION],
-          // TODO: Do we need to deposit into intermediate Sapphire account, then EVM transfer to target?
-          // see https://github.com/lukaw3d/withdraw-ROSE-from-Sapphire/commit/a6db0973d989ac0f8d875e746b4661984604dd7a
-          to: oasis.staking.addressFromBech32(await getEvmBech32Address(sapphireAddress)),
+        // setAllowance to sapphireConfig.mainnet.address
+        const tw = oasis.staking.allowWrapper()
+        tw.setNonce(await getConsensusNonce(consensusAddress))
+        tw.setFeeAmount(oasis.quantity.fromBigInt(0n))
+        tw.setBody({
+          beneficiary: oasis.staking.addressFromBech32(sapphireConfig.mainnet.address),
+          negative: false,
+          amount_change: oasis.quantity.fromBigInt(amountToDeposit), // TODO: this assumes that initial allowance is 0
         })
-        .setFeeAmount([oasis.quantity.fromBigInt(0n), oasisRT.token.NATIVE_DENOMINATION])
-        .setFeeGas(sapphireConfig.feeGas)
-        .setFeeConsensusMessages(1)
-        .setSignerInfo([
-          {
-            address_spec: {
-              signature: { ed25519: signer.public() },
+        const gas = await tw.estimateGas(nic, signer.public())
+        tw.setFeeGas(gas)
+        await tw.sign(new oasis.signature.BlindContextSigner(signer), chainContext)
+        await tw.submit(nic)
+
+        // Deposit into intermediate Sapphire
+        const rtw = new oasisRT.consensusAccounts.Wrapper(
+          oasis.misc.fromHex(sapphireConfig.mainnet.runtimeId),
+        ).callDeposit()
+        rtw
+          .setBody({
+            amount: [oasis.quantity.fromBigInt(amountToDeposit * multiplyConsensusToSapphire), oasisRT.token.NATIVE_DENOMINATION],
+            // Don't deposit to final sapphire account directly. Users might input an exchange account
+            // that doesn't recognize deposit txs.
+            to: oasis.staking.addressFromBech32(await getEvmBech32Address(intermediateSapphireAddress)),
+          })
+          .setFeeAmount([oasis.quantity.fromBigInt(0n), oasisRT.token.NATIVE_DENOMINATION])
+          .setFeeGas(sapphireConfig.feeGas)
+          .setFeeConsensusMessages(1)
+          .setSignerInfo([
+            {
+              address_spec: {
+                signature: { ed25519: signer.public() },
+              },
+              nonce: await getSapphireNonce(consensusAddress),
             },
-            nonce: await getSapphireNonce(consensusAddress),
-          },
-        ])
-      await rtw.sign([new oasis.signature.BlindContextSigner(signer)], chainContext)
-      await rtw.submit(nic)
+          ])
+        await rtw.sign([new oasis.signature.BlindContextSigner(signer)], chainContext)
+        await rtw.submit(nic)
+        setTimeout(poll, 10000) // Fetch balances again and it'll trigger next IF
+      } else if (intermediateSapphireBalance > 0n) {
+        console.log('transferable', intermediateSapphireBalance)
+        const feeAmount = sapphireConfig.gasPrice * sapphireConfig.feeGas * multiplyConsensusToSapphire
+        const amountToTransfer = intermediateSapphireBalance - feeAmount
+
+        // Transfer into final Sapphire
+        const rtw = new oasisRT.accounts.Wrapper(
+          oasis.misc.fromHex(sapphireConfig.mainnet.runtimeId),
+        ).callTransfer()
+        rtw
+          .setBody({
+            amount: [oasis.quantity.fromBigInt(amountToTransfer), oasisRT.token.NATIVE_DENOMINATION],
+            to: oasis.staking.addressFromBech32(await getEvmBech32Address(sapphireAddress)),
+          })
+          .setFeeAmount([oasis.quantity.fromBigInt(feeAmount), oasisRT.token.NATIVE_DENOMINATION])
+          .setFeeGas(sapphireConfig.feeGas)
+          .setSignerInfo([
+            {
+              address_spec: {
+                signature: { secp256k1eth: intermediateSapphireSigner.public() },
+              },
+              nonce: await getSapphireNonce(await getEvmBech32Address(intermediateSapphireAddress)),
+            },
+          ])
+
+        await rtw.sign([new oasis.signature.BlindContextSigner(intermediateSapphireSigner)], chainContext)
+        await rtw.submit(nic)
+        setTimeout(poll, 1) // Update balances
+      } else {
+        setTimeout(poll, 10000)
+      }
     } catch (err) {
       console.error(err)
       alert(err)
+      setTimeout(poll, 10000)
     }
-
-    poll()
   }
   poll()
 

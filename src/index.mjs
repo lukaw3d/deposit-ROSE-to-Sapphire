@@ -6,8 +6,9 @@ import { hdkey } from '@ethereumjs/wallet'
 
 const sapphireConfig = {
   mainnet: {
-    address: 'oasis1qrd3mnzhhgst26hsp96uf45yhq6zlax0cuzdgcfc',
-    runtimeId: '000000000000000000000000000000000000000000000000f80306c9858e7279',
+    // pontusxdev
+    address: 'oasis1qr02702pr8ecjuff2z3es254pw9xl6z2yg9qcc6c',
+    runtimeId: '0000000000000000000000000000000000000000000000004febe52eb412b421',
   },
   testnet: {
     address: 'oasis1qqczuf3x6glkgjuf0xgtcpjjw95r3crf7y2323xd',
@@ -39,7 +40,7 @@ async function init() {
   if (!sapphireAddress) throw new Error('Invalid sapphire address')
   if (!/^0x[0-9a-fA-F]{40}$/.test(sapphireAddress)) throw new Error('Invalid sapphire address')
 
-  const nic = new oasis.client.NodeInternal('https://grpc.oasis.io')
+  const nic = new oasis.client.NodeInternal('https://testnet.grpc.oasis.io')
   const chainContext = await nic.consensusGetChainContext()
 
   async function updateBalances() {
@@ -82,12 +83,12 @@ async function init() {
         ).callDeposit()
         rtw
           .setBody({
-            amount: [oasis.quantity.fromBigInt(amountToDeposit * multiplyConsensusToSapphire), oasisRT.token.NATIVE_DENOMINATION],
+            amount: [oasis.quantity.fromBigInt(amountToDeposit * multiplyConsensusToSapphire), oasis.misc.fromString('TEST')],
             // Don't deposit to final sapphire account directly. Users might input an exchange account
             // that doesn't recognize deposit txs.
             to: oasis.staking.addressFromBech32(await getEvmBech32Address(intermediateSapphireAddress)),
           })
-          .setFeeAmount([oasis.quantity.fromBigInt(0n), oasisRT.token.NATIVE_DENOMINATION])
+          .setFeeAmount([oasis.quantity.fromBigInt(0n), oasis.misc.fromString('TEST')])
           .setFeeGas(sapphireConfig.feeGas)
           .setFeeConsensusMessages(1)
           .setSignerInfo([
@@ -112,10 +113,10 @@ async function init() {
         ).callTransfer()
         rtw
           .setBody({
-            amount: [oasis.quantity.fromBigInt(amountToTransfer), oasisRT.token.NATIVE_DENOMINATION],
+            amount: [oasis.quantity.fromBigInt(0n), oasisRT.token.NATIVE_DENOMINATION],
             to: oasis.staking.addressFromBech32(await getEvmBech32Address(sapphireAddress)),
           })
-          .setFeeAmount([oasis.quantity.fromBigInt(feeAmount), oasisRT.token.NATIVE_DENOMINATION])
+          .setFeeAmount([oasis.quantity.fromBigInt(feeAmount), oasis.misc.fromString('TEST')])
           .setFeeGas(sapphireConfig.feeGas)
           .setSignerInfo([
             {
@@ -187,7 +188,7 @@ async function getEvmBech32Address(evmAddress) {
  * @param {`oasis1${string}`} oasisAddress
  */
 async function getConsensusBalance(oasisAddress) {
-  const nic = new oasis.client.NodeInternal('https://grpc.oasis.io')
+  const nic = new oasis.client.NodeInternal('https://testnet.grpc.oasis.io')
   const owner = oasis.staking.addressFromBech32(oasisAddress)
   const account = await nic.stakingAccount({ height: oasis.consensus.HEIGHT_LATEST, owner: owner })
   return oasis.quantity.toBigInt(account.general?.balance ?? new Uint8Array([0]))
@@ -196,7 +197,7 @@ async function getConsensusBalance(oasisAddress) {
  * @param {`oasis1${string}`} oasisAddress
  */
 async function getConsensusNonce(oasisAddress) {
-  const nic = new oasis.client.NodeInternal('https://grpc.oasis.io')
+  const nic = new oasis.client.NodeInternal('https://testnet.grpc.oasis.io')
   const nonce =
     (await nic.consensusGetSignerNonce({
       account_address: oasis.staking.addressFromBech32(oasisAddress),
@@ -209,7 +210,7 @@ async function getConsensusNonce(oasisAddress) {
  * @param {`oasis1${string}`} oasisAddress
  */
 async function getSapphireNonce(oasisAddress) {
-  const nic = new oasis.client.NodeInternal('https://grpc.oasis.io')
+  const nic = new oasis.client.NodeInternal('https://testnet.grpc.oasis.io')
   const accountsWrapper = new oasisRT.accounts.Wrapper(oasis.misc.fromHex(sapphireConfig.mainnet.runtimeId))
   const nonce = await accountsWrapper
     .queryNonce()
@@ -222,7 +223,7 @@ async function getSapphireNonce(oasisAddress) {
  * @param {`0x${string}`} ethAddress
  */
 async function getSapphireBalance(ethAddress) {
-  const nic = new oasis.client.NodeInternal('https://grpc.oasis.io')
+  const nic = new oasis.client.NodeInternal('https://testnet.grpc.oasis.io')
   const consensusWrapper = new oasisRT.consensusAccounts.Wrapper(
     oasis.misc.fromHex(sapphireConfig.mainnet.runtimeId),
   )

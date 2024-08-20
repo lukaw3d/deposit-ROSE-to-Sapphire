@@ -36,15 +36,21 @@ async function init() {
   const nic = new oasis.client.NodeInternal('https://grpc.oasis.io')
   const chainContext = await nic.consensusGetChainContext()
 
+  async function updateBalances() {
+    const consensusBalance = await getConsensusBalance(consensusAddress)
+    const sapphireBalance = await getSapphireBalance(sapphireAddress)
+
+    window.print_mnemonic.textContent = mnemonic
+    window.print_consensus_account.textContent = consensusAddress + '   balance: ' + consensusBalance
+    window.print_sapphire_account.textContent = sapphireAddress + '   balance: ' + sapphireBalance
+    return { consensusBalance, sapphireBalance }
+  }
+
   async function poll() {
     try {
-      const consensusBalance = await getConsensusBalance(consensusAddress)
-      const sapphireBalance = await getSapphireBalance(sapphireAddress)
+      const { consensusBalance, sapphireBalance } = await updateBalances()
       console.log({ consensusBalance, sapphireBalance })
 
-      window.print_mnemonic.textContent = mnemonic
-      window.print_consensus_account.textContent = consensusAddress + '   balance: ' + consensusBalance
-      window.print_sapphire_account.textContent = sapphireAddress + '   balance: ' + sapphireBalance
       if (consensusBalance <= 0n) {
         setTimeout(poll, 10000)
         return

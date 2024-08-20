@@ -5,6 +5,7 @@
     "build": "parcel build --public-url /deposit-ROSE-to-Sapphire/ src/index.html"
   },
   "dependencies": {
+    "@ethereumjs/util": "^9.1.0",
     "@oasisprotocol/client": "^1.1.0",
     "@oasisprotocol/client-rt": "^1.1.0"
   },

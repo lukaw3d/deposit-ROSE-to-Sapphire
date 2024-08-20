@@ -1,6 +1,8 @@
 // @ts-check
 import * as oasis from '@oasisprotocol/client'
 import * as oasisRT from '@oasisprotocol/client-rt'
+import { bytesToHex, privateToAddress, toChecksumAddress } from '@ethereumjs/util'
+import { hdkey } from '@ethereumjs/wallet'
 
 const sapphireConfig = {
   mainnet: {
@@ -20,12 +22,16 @@ const consensusConfig = {
 }
 const multiplyConsensusToSapphire = 10n ** BigInt(sapphireConfig.decimals - consensusConfig.decimals)
 
+// consensus (signer) -> sapphire (intermediateSapphireSigner) -> target sapphire (sapphireAddress)
 async function init() {
   const mnemonic = oasis.hdkey.HDKey.generateMnemonic(256)
   const signer = oasis.signature.NaclSigner.fromSecret((await oasis.hdkey.HDKey.getAccountSigner(mnemonic, 0)).secretKey, 'this key is not important')
   const consensusAddress =
     /** @type {`oasis1${string}`} */
     (await publicKeyToAddress(signer.public()))
+
+  const intermediateSapphireSigner = oasisRT.signatureSecp256k1.EllipticSigner.fromPrivate(hdkey.EthereumHDKey.fromMnemonic(mnemonic).derivePath("m/44'/60'/0'/0/0").getWallet().getPrivateKey(), 'this key is not important')
+  const intermediateSapphireAddress = privateToEthAddress(intermediateSapphireSigner.key.getPrivate('hex'))
 
   const sapphireAddress =
     /** @type {`0x${string}`} */
@@ -38,18 +44,20 @@ async function init() {
 
   async function updateBalances() {
     const consensusBalance = await getConsensusBalance(consensusAddress)
+    const intermediateSapphireBalance = await getSapphireBalance(intermediateSapphireAddress)
     const sapphireBalance = await getSapphireBalance(sapphireAddress)
 
     window.print_mnemonic.textContent = mnemonic
     window.print_consensus_account.textContent = consensusAddress + '   balance: ' + consensusBalance
+    window.print_intermediate_sapphire_account.textContent = intermediateSapphireAddress + '   balance: ' + intermediateSapphireBalance
     window.print_sapphire_account.textContent = sapphireAddress + '   balance: ' + sapphireBalance
-    return { consensusBalance, sapphireBalance }
+    return { consensusBalance, intermediateSapphireBalance, sapphireBalance }
   }
 
   async function poll() {
     try {
-      const { consensusBalance, sapphireBalance } = await updateBalances()
-      console.log({ consensusBalance, sapphireBalance })
+      const { consensusBalance, intermediateSapphireBalance, sapphireBalance } = await updateBalances()
+      console.log({ consensusBalance, intermediateSapphireBalance, sapphireBalance })
 
       if (consensusBalance <= 0n) {
         setTimeout(poll, 10000)
@@ -125,6 +133,18 @@ async function publicKeyToAddress(publicKey) {
   return oasis.staking.addressToBech32(data)
 }
 
+/** @param {string} ethPrivateKey */
+function privateToEthAddress(ethPrivateKey) {
+  return /** @type {`0x${string}`} */ (
+    toChecksumAddress(bytesToHex(privateToAddress(hexToBuffer(ethPrivateKey))))
+  )
+}
+
+/** @param {string} value */
+function hexToBuffer(value) {
+  return Buffer.from(value, 'hex')
+}
+
 /** @param {`0x${string}`} evmAddress */
 async function getEvmBech32Address(evmAddress) {
   const evmBytes = oasis.misc.fromHex(evmAddress.replace('0x', ''))
@@ -133,7 +153,7 @@ async function getEvmBech32Address(evmAddress) {
     oasisRT.address.V0_SECP256K1ETH_CONTEXT_VERSION,
     evmBytes,
   )
-  const bech32Address = oasisRT.address.toBech32(address)
+  const bech32Address = /** @type {`oasis1${string}`}*/ (oasisRT.address.toBech32(address))
   return bech32Address
 }
 

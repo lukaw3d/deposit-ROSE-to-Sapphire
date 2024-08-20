@@ -113,7 +113,7 @@ async function init() {
         ).callTransfer()
         rtw
           .setBody({
-            amount: [oasis.quantity.fromBigInt(0n), oasisRT.token.NATIVE_DENOMINATION],
+            amount: [oasis.quantity.fromBigInt(0n), oasis.misc.fromString('this works??')],
             to: oasis.staking.addressFromBech32(await getEvmBech32Address(sapphireAddress)),
           })
           .setFeeAmount([oasis.quantity.fromBigInt(feeAmount), oasis.misc.fromString('TEST')])

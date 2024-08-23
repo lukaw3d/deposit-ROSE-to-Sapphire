@@ -1,6 +1,7 @@
 // @ts-check
 import * as oasis from '@oasisprotocol/client'
 import * as oasisRT from '@oasisprotocol/client-rt'
+import { getAddress, hexToBytes } from 'viem'
 
 const sapphireConfig = {
   mainnet: {
@@ -21,15 +22,26 @@ const consensusConfig = {
 const multiplyConsensusToSapphire = 10n ** BigInt(sapphireConfig.decimals - consensusConfig.decimals)
 
 async function init() {
-  const mnemonic = oasis.hdkey.HDKey.generateMnemonic(256)
-  const signer = oasis.signature.NaclSigner.fromSecret((await oasis.hdkey.HDKey.getAccountSigner(mnemonic, 0)).secretKey, 'this key is not important')
+  const [account] = await window.ethereum.request({
+    method: 'eth_requestAccounts',
+  });
+  const from = getAddress(account);
+  const msg = `0x${Buffer.from(siweMessageConsensusToSapphire(from), 'utf8').toString('hex')}`;
+  const siweSignature = await window.ethereum.request({
+    method: 'personal_sign',
+    params: [msg, from],
+  });
+  const hashedSignature = await window.crypto.subtle.digest('SHA-512', hexToBytes(siweSignature));
+  // Only take half
+  const seed32bytes = new Uint8Array(hashedSignature.slice(0, hashedSignature.byteLength / 2))
+  if (seed32bytes.length !== 32) throw new Error('Unexpected derived private key length')
+  const signer = oasis.signature.NaclSigner.fromSeed(seed32bytes, 'this key is not important')
+  const privateKey = oasis.misc.toBase64(signer.key.secretKey)
   const consensusAddress =
     /** @type {`oasis1${string}`} */
     (await publicKeyToAddress(signer.public()))
 
-  const sapphireAddress =
-    /** @type {`0x${string}`} */
-    (prompt('Sapphire address you want to send ROSE to', '0x') || '')
+  const sapphireAddress = from
   if (!sapphireAddress) throw new Error('Invalid sapphire address')
   if (!/^0x[0-9a-fA-F]{40}$/.test(sapphireAddress)) throw new Error('Invalid sapphire address')
 
@@ -40,7 +52,7 @@ async function init() {
     const consensusBalance = await getConsensusBalance(consensusAddress)
     const sapphireBalance = await getSapphireBalance(sapphireAddress)
 
-    window.print_mnemonic.textContent = mnemonic
+    window.print_private_key.textContent = privateKey
     window.print_consensus_account.textContent = consensusAddress + '   balance: ' + consensusBalance
     window.print_sapphire_account.textContent = sapphireAddress + '   balance: ' + sapphireBalance
     return { consensusBalance, sapphireBalance }
@@ -80,8 +92,7 @@ async function init() {
       rtw
         .setBody({
           amount: [oasis.quantity.fromBigInt(amountToDeposit * multiplyConsensusToSapphire), oasisRT.token.NATIVE_DENOMINATION],
-          // TODO: Do we need to deposit into intermediate Sapphire account, then EVM transfer to target?
-          // see https://github.com/lukaw3d/withdraw-ROSE-from-Sapphire/commit/a6db0973d989ac0f8d875e746b4661984604dd7a
+          // No need for intermediate account to transfer from when depositing to an account user has control over.
           to: oasis.staking.addressFromBech32(await getEvmBech32Address(sapphireAddress)),
         })
         .setFeeAmount([oasis.quantity.fromBigInt(0n), oasisRT.token.NATIVE_DENOMINATION])
@@ -118,6 +129,28 @@ init().catch((err) => {
 })
 
 // Utils
+
+// https://docs.metamask.io/wallet/how-to/sign-data/siwe/
+// https://eips.ethereum.org/EIPS/eip-4361
+/** @param {`0x${string}`} address */
+function siweMessageConsensusToSapphire(address) {
+  const statement =
+    "Signing this message will generate an Oasis Consensus account, " +
+    "please don't sign this message on any other site";
+  const issuedAt = "2000-01-01T00:00:01Z";
+  return (
+    `localhost:5173 wants you to sign in with your Ethereum account:\n` +
+    `${address}\n` +
+    `\n` +
+    `${statement}\n` +
+    `\n` +
+    `URI: http://localhost:5173/\n` +
+    `Version: 1\n` + // Must be 1
+    `Chain ID: 23294\n` + // Sapphire Mainnet
+    `Nonce: noReplayProtection\n` + // All fields must be constant to always derive the same account
+    `Issued At: ${issuedAt}`
+  );
+}
 
 /** @param {Uint8Array} publicKey */
 async function publicKeyToAddress(publicKey) {

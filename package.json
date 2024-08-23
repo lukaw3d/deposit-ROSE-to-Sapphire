@@ -8,7 +8,8 @@
     "@ethereumjs/util": "^9.1.0",
     "@ethereumjs/wallet": "^2.0.4",
     "@oasisprotocol/client": "^1.1.0",
-    "@oasisprotocol/client-rt": "^1.1.0"
+    "@oasisprotocol/client-rt": "^1.1.0",
+    "viem": "^2.20.0"
   },
   "devDependencies": {
     "events": "^3.1.0",
